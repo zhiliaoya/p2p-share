@@ -155,8 +155,7 @@ p2p-share/
 ├── static/          # 静态前端文件（嵌入）
 │   ├── index.html   # PC端Web界面
 │   └── mobile.html  # 移动端Web界面（手机/平板自适应）
-├── go.mod           # 依赖管理
-└── nickname.txt     # 昵称配置文件（自动生成）
+└── go.mod           # 依赖管理
 ```
 ### 静态文件说明
 
