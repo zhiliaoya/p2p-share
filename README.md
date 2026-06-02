@@ -260,7 +260,7 @@ A: 程序会自动检测访问设备的 User-Agent，PC 浏览器返回 `index.h
 
 ## 致谢
 
-**本项目的所有代码均由 DeepSeek 编写。作者仅负责部署、测试和向 DeepSeek 反馈 Bug。**
+**本项目的所有代码均由 DeepSeek 编写。作者仅负责总体架构设计、部署运行测试和向 DeepSeek 反馈 Bug。**
 
 ## 许可证
 
