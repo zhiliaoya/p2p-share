@@ -148,7 +148,7 @@ curl -X POST http://localhost/api/verification/verify \
 | `/api/verification/status` | GET | 获取验证码状态 |
 
 ## 项目文件结构
-
+```bash
 p2p-share/
 ├── main.go          # 程序入口、静态文件嵌入
 ├── node.go          # 节点核心、文件操作、P2P通信
@@ -163,7 +163,7 @@ p2p-share/
 ├── go.sum           # 依赖校验
 ├── launcher.vbs     # Windows 启动脚本
 └── nickname.txt     # 昵称配置文件（自动生成）
-
+```
 ### 静态文件说明
 
 | 文件 | 说明 |
