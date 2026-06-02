@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover">
+  <title>P2P 文件共享 · 灵动版</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f0f1a;
+      --panel: #18182a;
+      --card: #1f1f35;
+      --accent: #4cc9a0;
+      --accent2: #5b8dee;
+      --text: #f0f0f5;
+      --text2: #9a9ab0;
+      --border: #2a2a40;
+      --online: #4cc9a0;
+      --offline: #4a4a5a;
+      --hover: #29294a;
+      --shadow: 0 8px 20px rgba(0,0,0,0.4);
+      --radius: 14px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      letter-spacing: 0.2px;
+    }
+
+    /* 验证码遮罩层 */
+    .verify-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.85);
+      backdrop-filter: blur(8px);
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s;
+    }
+    .verify-modal {
+      background: var(--panel);
+      border-radius: 24px;
+      padding: 32px 28px;
+      width: 90%;
+      max-width: 380px;
+      text-align: center;
+      border: 1px solid var(--border);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+    }
+    .verify-modal h2 {
+      font-size: 1.5rem;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .verify-modal p {
+      color: var(--text2);
+      font-size: 0.85rem;
+      margin-bottom: 20px;
+    }
+    .verify-input {
+      background: var(--card);
+      border: 1px solid var(--border);
+      width: 100%;
+      padding: 14px;
+      font-size: 1.2rem;
+      text-align: center;
+      letter-spacing: 8px;
+      border-radius: 16px;
+      color: var(--text);
+      outline: none;
+      margin-bottom: 16px;
+    }
+    .verify-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 12px rgba(76,201,160,0.3);
+    }
+    .verify-btn {
+      background: var(--accent);
+      border: none;
+      width: 100%;
+      padding: 12px;
+      border-radius: 40px;
+      font-weight: bold;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: 0.2s;
+      color: #000;
+    }
+    .verify-btn:hover { filter: brightness(1.1); transform: scale(0.98); }
+    .verify-error {
+      color: #ff6b6b;
+      font-size: 0.8rem;
+      margin-top: 12px;
+      min-height: 36px;
+    }
+    .verify-skip {
+      margin-top: 20px;
+      font-size: 0.7rem;
+      color: var(--text2);
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+    }
+
+    .sidebar {
+      width: 300px;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      backdrop-filter: blur(4px);
+      box-shadow: 2px 0 15px rgba(0,0,0,0.3);
+    }
+    .sidebar-header {
+      padding: 18px 16px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+    }
+    .sidebar-header h2 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .my-info {
+      font-size: 0.8rem;
+      color: var(--text2);
+      background: rgba(0,0,0,0.25);
+      padding: 10px 12px;
+      border-radius: 12px;
+      line-height: 1.6;
+    }
+    .status-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      background: var(--online);
+      border-radius: 50%;
+      margin-right: 6px;
+      box-shadow: 0 0 8px var(--online);
+      animation: softPulse 2s infinite;
+    }
+    @keyframes softPulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(0.9); } }
+    .badge {
+      font-size: 0.7rem;
+      padding: 2px 10px;
+      border-radius: 20px;
+      margin-left: 8px;
+      font-weight: 500;
+    }
+    .badge.local { background: rgba(76,201,160,0.2); color: #4cc9a0; border: 1px solid rgba(76,201,160,0.3); }
+    .badge.remote { background: rgba(120,120,150,0.2); color: #b0b0cc; }
+
+    .admin-panel {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(91,141,238,0.06);
+      display: none;
+    }
+    .admin-panel.show { display: block; }
+    .admin-panel label { font-size: 0.7rem; color: var(--text2); margin-bottom: 6px; display: block; }
+    .input-group { display: flex; gap: 6px; }
+    .input-group input {
+      flex: 1;
+      background: var(--border);
+      border: 1px solid transparent;
+      padding: 8px 10px;
+      border-radius: 8px;
+      color: white;
+      font-size: 0.8rem;
+      outline: none;
+      transition: 0.2s;
+    }
+    .input-group input:focus { border-color: var(--accent); box-shadow: 0 0 8px rgba(76,201,160,0.3); }
+    .input-group button {
+      background: var(--accent);
+      color: #000;
+      font-weight: bold;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .input-group button:hover { filter: brightness(1.1); }
+
+    /* 验证码设置面板 */
+    .code-panel {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(76,201,160,0.05);
+      display: none;
+    }
+    .code-panel.show { display: block; }
+    .code-panel label { font-size: 0.7rem; color: var(--text2); margin-bottom: 6px; display: block; }
+    .code-status {
+      font-size: 0.7rem;
+      padding: 6px 8px;
+      background: rgba(0,0,0,0.3);
+      border-radius: 8px;
+      margin-top: 8px;
+      color: var(--accent);
+    }
+
+    .mobile-qr-section {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: none;
+    }
+    .mobile-qr-section.show { display: block; }
+    .qr-btn {
+      width: 100%;
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--accent2);
+      padding: 10px;
+      border-radius: 10px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: 0.2s;
+    }
+    .qr-btn:hover { background: var(--hover); border-color: var(--accent2); }
+
+    .qr-modal {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .qr-modal.active { display: flex; }
+    .qr-dialog {
+      background: var(--panel);
+      border-radius: 20px;
+      padding: 24px;
+      text-align: center;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      max-width: 300px;
+      width: 90%;
+    }
+    .qr-dialog h3 { margin-bottom: 16px; font-size: 1rem; }
+    .qr-dialog .url-text {
+      background: var(--card);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.75rem;
+      word-break: break-all;
+      margin: 12px 0;
+      color: var(--accent);
+    }
+    .qr-dialog button {
+      background: var(--accent);
+      color: #000;
+      border: none;
+      padding: 8px 20px;
+      border-radius: 20px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+
+    .sidebar-tabs { display: flex; border-bottom: 1px solid var(--border); }
+    .sidebar-tab {
+      flex: 1; text-align: center; padding: 12px; font-size: 0.8rem;
+      font-weight: 600; cursor: pointer; color: var(--text2);
+      border-bottom: 2px solid transparent; transition: 0.2s;
+    }
+    .sidebar-tab.active { color: var(--accent); border-bottom-color: var(--accent); background: rgba(76,201,160,0.05); }
+    .sidebar-content { flex: 1; overflow-y: auto; padding: 8px; }
+
+    .peer-card {
+      background: var(--card); border-radius: 12px; padding: 12px;
+      margin-bottom: 6px; cursor: pointer; transition: all 0.2s;
+      border: 1px solid transparent; position: relative;
+    }
+    .peer-card:hover { background: var(--hover); border-color: var(--accent2); }
+    .peer-card.selected { border-color: var(--accent); background: rgba(76,201,160,0.08); }
+    .peer-name { font-weight: 700; font-size: 0.9rem; }
+    .peer-ip { font-size: 0.7rem; color: var(--text2); margin-top: 4px; }
+    .peer-status { position: absolute; top: 12px; right: 14px; width: 10px; height: 10px; border-radius: 50%; }
+    .peer-status.online { background: var(--online); box-shadow: 0 0 10px var(--online); }
+    .peer-status.offline { background: var(--offline); }
+
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+    .main-header {
+      padding: 14px 20px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+    }
+    .toolbar { display: flex; gap: 8px; align-items: center; }
+    .toolbar input {
+      background: var(--card); border: 1px solid var(--border); padding: 8px 14px;
+      border-radius: 20px; color: white; font-size: 0.8rem; width: 180px; outline: none;
+    }
+    .toolbar input:focus { border-color: var(--accent); }
+    .toolbar button {
+      background: var(--card); color: white; border: 1px solid var(--border);
+      padding: 8px 16px; border-radius: 20px; font-size: 0.8rem; cursor: pointer; transition: 0.2s;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .toolbar button.primary { background: var(--accent); border-color: var(--accent); color: #000; font-weight: bold; }
+    .path-bar { display: flex; align-items: center; gap: 4px; padding: 8px 20px; font-size: 0.8rem; flex-wrap: wrap; }
+    .path-bar a { color: var(--accent2); text-decoration: none; padding: 4px 6px; border-radius: 6px; }
+    .path-bar a:hover { background: rgba(91,141,238,0.2); }
+    .file-area { flex: 1; overflow-y: auto; padding: 16px 20px; }
+    .file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); gap: 12px; }
+    .file-card {
+      background: var(--card); border-radius: var(--radius); padding: 16px 8px;
+      cursor: pointer; transition: 0.2s; text-align: center; border: 1px solid transparent;
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    .file-card:hover { border-color: var(--accent2); background: var(--hover); transform: translateY(-2px); }
+    .file-card .icon { font-size: 2.2rem; }
+    .file-card .name { font-size: 0.8rem; font-weight: 500; word-break: break-word; }
+    .toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: var(--card); color: white; padding: 10px 22px; border-radius: 30px;
+      font-size: 0.8rem; z-index: 999; border: 1px solid var(--accent);
+      box-shadow: var(--shadow); animation: slideUp 0.3s;
+    }
+    @keyframes slideUp { from { opacity: 0; transform: translateX(-50%) translateY(20px); } }
+  </style>
+</head>
+<body>
+
+<!-- 验证码遮罩层 -->
+<div class="verify-overlay" id="verifyOverlay" style="display: none;">
+  <div class="verify-modal">
+    <h2>🔐 访问验证</h2>
+    <p>当前非本机访问，请输入4位数字验证码</p>
+    <input type="password" id="verifyCodeInput" class="verify-input" maxlength="4" pattern="[0-9]*" inputmode="numeric" placeholder="请输入4位数字">
+    <button class="verify-btn" onclick="submitVerification()">验证访问</button>
+    <div class="verify-error" id="verifyError"></div>
+    <div class="verify-skip">💡 提示: 请在本机终端或管理面板设置验证码</div>
+  </div>
+</div>
+
+<div class="sidebar">
+  <div class="sidebar-header">
+    <h2>📡 共享空间</h2>
+    <div class="my-info">
+      <div><span class="status-dot"></span><strong id="myNick">加载中</strong><span class="badge" id="accessBadge"></span></div>
+      <div id="myIP">-</div>
+      <div id="myShare">📂 -</div>
+    </div>
+  </div>
+
+  <!-- 管理员面板（仅本机可见） -->
+  <div class="admin-panel" id="adminPanel">
+    <label>🗂️ 设置共享目录</label>
+    <div class="input-group">
+      <input type="text" id="sharePathInput" placeholder="如 /home/user/share">
+      <button onclick="setShareDir()">应用</button>
+    </div>
+  </div>
+
+  <!-- 验证码设置面板（仅本机可见） -->
+  <div class="code-panel" id="codePanel">
+    <label>🔐 设置访问验证码（4位数字）</label>
+    <div class="input-group">
+      <input type="password" id="verificationCodeInput" maxlength="4" placeholder="例如 1234">
+      <button onclick="setVerificationCode()">确认设置</button>
+    </div>
+    <div class="code-status" id="codeStatus">⚪ 未设置验证码</div>
+  </div>
+
+  <div class="mobile-qr-section" id="mobileQRSection">
+    <button class="qr-btn" onclick="showQRCode()">
+      <span>📱</span> 手机访问此页面
+    </button>
+  </div>
+
+  <div class="sidebar-tabs">
+    <div class="sidebar-tab active" onclick="switchTab('peers')">🌐 节点</div>
+    <div class="sidebar-tab" onclick="switchTab('local')">📂 本地</div>
+  </div>
+  <div class="sidebar-content" id="peersList"></div>
+  <div class="sidebar-content" id="localTree" style="display:none;"></div>
+</div>
+
+<div class="main">
+  <div class="main-header">
+    <div style="font-weight:600;" id="pageTitle">📂 共享文件</div>
+    <div class="toolbar">
+      <input type="text" id="searchInput" placeholder="🔍 搜索文件..." oninput="debounceSearch()">
+      <button onclick="refreshCurrent()" title="刷新当前目录">🔄</button>
+      <button onclick="browsePath('/')">🏠 根目录</button>
+    </div>
+  </div>
+  <div class="path-bar" id="pathBar"></div>
+  <div class="file-area"><div class="file-grid" id="fileGrid"></div></div>
+</div>
+
+<div class="qr-modal" id="qrModal">
+  <div class="qr-dialog">
+    <h3>📱 移动端访问</h3>
+    <p style="font-size:0.75rem;color:var(--text2);margin-bottom:12px;">扫描二维码，手机浏览器打开</p>
+    <div id="qrcodeContainer" style="display: flex; justify-content: center; margin: 8px 0;"></div>
+    <div class="url-text" id="mobileUrl"></div>
+    <button onclick="closeQRModal()">关闭</button>
+  </div>
+</div>
+
+<script>
+  (function() {
+    let currentPeer = 'local';
+    let currentPath = '/';
+    let allFiles = [];
+    let isLocal = false;
+    let searchTimer = null;
+    let autoRefreshInterval = null;
+    const REFRESH_INTERVAL = 10;
+    let localIP = '';
+    let isVerified = false;  // 是否已通过验证
+
+    // 初始化 - 先检查是否需要验证
+    async function init() {
+      await loadLocalInfo();
+      
+      // 如果不是本机访问且未验证，显示验证码弹窗
+      if (!isLocal && !isVerified) {
+        showVerificationModal();
+        return;
+      }
+      
+      await browsePath('/');
+      loadPeers();
+      setInterval(loadPeers, 12000);
+      startAutoRefresh();
+      
+      document.getElementById('searchInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          e.target.value = '';
+          browsePath(currentPath);
+        }
+      });
+      
+      document.getElementById('qrModal').addEventListener('click', function(e) {
+        if (e.target === this) closeQRModal();
+      });
+      
+      // 验证码输入框自动聚焦
+      const verifyInput = document.getElementById('verifyCodeInput');
+      if (verifyInput) {
+        verifyInput.addEventListener('keypress', (e) => {
+          if (e.key === 'Enter') submitVerification();
+        });
+      }
+    }
+
+    // 显示验证码遮罩
+    function showVerificationModal() {
+      const overlay = document.getElementById('verifyOverlay');
+      overlay.style.display = 'flex';
+      const input = document.getElementById('verifyCodeInput');
+      if (input) {
+        setTimeout(() => input.focus(), 100);
+      }
+    }
+
+    // 隐藏验证码遮罩
+    function hideVerificationModal() {
+      const overlay = document.getElementById('verifyOverlay');
+      overlay.style.display = 'none';
+    }
+
+    // 提交验证
+    window.submitVerification = async function() {
+      const codeInput = document.getElementById('verifyCodeInput');
+      const code = codeInput.value.trim();
+      const errorDiv = document.getElementById('verifyError');
+      
+      if (!code || code.length !== 4) {
+        errorDiv.textContent = '❌ 请输入4位数字验证码';
+        return;
+      }
+      
+      try {
+        const res = await fetch('/api/verification/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: code })
+        });
+        const data = await res.json();
+        
+        if (data.ok && data.result === true) {
+          isVerified = true;
+          hideVerificationModal();
+          showToast('✅ 验证成功，正在加载...');
+          // 重新初始化界面
+          await browsePath('/');
+          loadPeers();
+          startAutoRefresh();
+        } else {
+          errorDiv.textContent = '❌ ' + (data.error || '验证码错误');
+          codeInput.value = '';
+          codeInput.focus();
+          if (data.error && data.error.includes('失效')) {
+            errorDiv.innerHTML = '❌ 验证码已失效，请在本机重新设置';
+          }
+        }
+      } catch (err) {
+        errorDiv.textContent = '❌ 验证服务异常，请稍后重试';
+        console.error(err);
+      }
+    };
+
+    // 设置验证码（仅本机）
+    window.setVerificationCode = async function() {
+      const codeInput = document.getElementById('verificationCodeInput');
+      const code = codeInput.value.trim();
+      
+      if (!code || code.length !== 4 || !/^\d+$/.test(code)) {
+        showToast('❌ 请输入4位数字验证码');
+        return;
+      }
+      
+      try {
+        const res = await fetch('/api/verification/set', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: code })
+        });
+        const data = await res.json();
+        
+        if (data.ok) {
+          showToast('✅ 验证码已设置: ' + '****');
+          updateCodeStatus(true, code);
+          codeInput.value = '';
+        } else {
+          showToast('❌ ' + (data.error || '设置失败，仅本机可操作'));
+        }
+      } catch (err) {
+        showToast('❌ 设置失败: ' + err.message);
+      }
+    };
+
+    // 获取验证码状态
+    async function updateCodeStatus() {
+      try {
+        const res = await fetch('/api/verification/status');
+        const data = await res.json();
+        if (data.ok && data.is_set) {
+          document.getElementById('codeStatus').innerHTML = `🟢 验证码已设置 (剩余尝试: ${data.remaining_attempts}/3)`;
+        } else {
+          document.getElementById('codeStatus').innerHTML = '⚪ 未设置验证码';
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    async function loadLocalInfo() {
+      try {
+        const res = await fetch('/api/local/info');
+        const info = await res.json();
+        document.getElementById('myNick').textContent = info.nick || '我';
+        document.getElementById('myIP').textContent = (info.ip || '') + ':' + (info.port || '');
+        document.getElementById('myShare').textContent = '📂 ' + (info.share_dir || '未设置');
+        isLocal = info.is_local === true;
+        localIP = info.ip || '';
+
+        const badge = document.getElementById('accessBadge');
+        const adminPanel = document.getElementById('adminPanel');
+        const codePanel = document.getElementById('codePanel');
+        const mobileSection = document.getElementById('mobileQRSection');
+
+        if (isLocal) {
+          badge.textContent = '本机';
+          badge.className = 'badge local';
+          adminPanel.classList.add('show');
+          codePanel.classList.add('show');
+          document.getElementById('sharePathInput').value = info.share_dir || '';
+          
+          // 获取验证码状态
+          updateCodeStatus();
+          setInterval(updateCodeStatus, 5000);
+          
+          if (localIP && localIP !== '127.0.0.1' && localIP !== 'localhost' && localIP !== '::1') {
+            mobileSection.classList.add('show');
+          } else {
+            mobileSection.classList.remove('show');
+          }
+        } else {
+          badge.textContent = '远程';
+          badge.className = 'badge remote';
+          adminPanel.classList.remove('show');
+          codePanel.classList.remove('show');
+          mobileSection.classList.remove('show');
+        }
+      } catch (e) { 
+        console.warn('获取本地信息失败');
+        document.getElementById('mobileQRSection').classList.remove('show');
+      }
+    }
+
+    async function browsePath(path) {
+      currentPath = path;
+      try {
+        let url = currentPeer === 'local' 
+          ? `/api/local/browse?path=${encodeURIComponent(path)}`
+          : `/api/browse/${currentPeer}?path=${encodeURIComponent(path)}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || '无法访问');
+        allFiles = data.files || [];
+        renderFiles(allFiles);
+        renderPathBar(path);
+      } catch (e) {
+        document.getElementById('fileGrid').innerHTML = `<div class="empty-state" style="grid-column:1/-1;text-align:center;padding:40px;">❌ ${escHtml(e.message)}</div>`;
+      }
+    }
+
+    function renderFiles(files) {
+      const grid = document.getElementById('fileGrid');
+      if (!files.length) {
+        grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;text-align:center;padding:40px;">📭 空目录</div>';
+        return;
+      }
+      const sorted = [...files].sort((a,b) => (b.is_dir ? 1 : 0) - (a.is_dir ? 1 : 0) || a.name.localeCompare(b.name));
+      grid.innerHTML = sorted.map(f => {
+        const icon = f.is_dir ? '📁' : getFileIcon(f.type);
+        return `<div class="file-card" onclick="${f.is_dir ? `browsePath('${esc(f.path)}')` : `downloadFile('${esc(f.path)}','${esc(f.name)}')`}" title="${escHtml(f.name)}">
+          <div class="icon">${icon}</div><div class="name">${escHtml(f.name)}</div><div style="font-size:0.7rem;color:var(--text2)">${f.is_dir ? '文件夹' : (f.size_str||'')}</div>
+        </div>`;
+      }).join('');
+    }
+
+    function renderPathBar(path) {
+      const bar = document.getElementById('pathBar');
+      const parts = path.split('/').filter(p => p);
+      let html = `<a href="#" onclick="browsePath('/')">🏠</a>`;
+      let accum = '';
+      parts.forEach(p => { accum += '/' + p; html += `<span style="color:var(--text2)">›</span><a href="#" onclick="browsePath('${esc(accum)}')">${escHtml(p)}</a>`; });
+      bar.innerHTML = html;
+    }
+
+    function getFileIcon(type) {
+      const icons = { image:'🖼️', video:'🎬', audio:'🎵', text:'📝', pdf:'📕', archive:'📦' };
+      return icons[type] || '📄';
+    }
+
+    async function downloadFile(path, name) {
+      showToast(`⬇️ 下载 ${name}`);
+      try {
+        const url = currentPeer === 'local' 
+          ? `/api/local/download?path=${encodeURIComponent(path)}`
+          : `/api/download/${currentPeer}?path=${encodeURIComponent(path)}`;
+        const a = document.createElement('a');
+        a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+        showToast('✅ 下载完成');
+      } catch(e) { showToast('❌ 下载失败'); }
+    }
+
+    function debounceSearch() {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        const q = document.getElementById('searchInput').value.trim();
+        if (!q) { browsePath(currentPath); return; }
+        performSearch(q);
+      }, 350);
+    }
+
+    async function performSearch(q) {
+      try {
+        const res = await fetch(`/api/local/search?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        if (data.ok) {
+          allFiles = data.results;
+          renderFiles(data.results);
+          document.getElementById('pathBar').innerHTML = `🔍 搜索: "${escHtml(q)}" · ${data.total||0} 个结果`;
+        }
+      } catch(e) {}
+    }
+
+    async function setShareDir() {
+      const path = document.getElementById('sharePathInput').value.trim();
+      if (!path) return;
+      try {
+        const res = await fetch('/api/admin/share', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({path})
+        });
+        const data = await res.json();
+        if (data.ok) {
+          document.getElementById('myShare').textContent = '📂 ' + data.share_dir;
+          showToast('✅ 共享目录已更新');
+          browsePath('/');
+        } else showToast('❌ ' + (data.error||'失败'));
+      } catch(e) { showToast('❌ 仅本机可设置'); }
+    }
+
+    async function selectPeer(peerId) {
+      currentPeer = peerId;
+      currentPath = '/';
+      try {
+        const res = await fetch(`/api/peer/${peerId}`);
+        const peer = await res.json();
+        document.getElementById('pageTitle').textContent = `📁 ${peer.info?.nick || '节点'} 的文件`;
+      } catch(e) {}
+      browsePath('/');
+      document.querySelectorAll('.peer-card').forEach(c => c.classList.remove('selected'));
+      const target = [...document.querySelectorAll('.peer-card')].find(c => c.onclick?.toString().includes(peerId));
+      if(target) target.classList.add('selected');
+    }
+
+    async function loadPeers() {
+      try {
+        const res = await fetch('/api/peers');
+        const peers = await res.json();
+        const container = document.getElementById('peersList');
+        if (!peers || !peers.length) {
+          container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text2)">🔍 暂无节点</div>';
+          return;
+        }
+        container.innerHTML = peers.map(p => `
+          <div class="peer-card ${currentPeer === p.info.id ? 'selected' : ''}" onclick="selectPeer('${p.info.id}')">
+            <div class="peer-status ${p.is_online ? 'online' : 'offline'}"></div>
+            <div class="peer-name">${escHtml(p.info.nick)}</div>
+            <div class="peer-ip">${p.info.ip}:${p.info.port}</div>
+          </div>`).join('');
+      } catch(e) {}
+    }
+
+    function startAutoRefresh() {
+      if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+      autoRefreshInterval = setInterval(() => {
+        const searchVal = document.getElementById('searchInput').value.trim();
+        if (!searchVal) {
+          browsePath(currentPath);
+        }
+      }, REFRESH_INTERVAL);
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+      event.target.classList.add('active');
+      document.getElementById('peersList').style.display = tab==='peers'?'block':'none';
+      document.getElementById('localTree').style.display = tab==='local'?'block':'none';
+    }
+
+    function refreshCurrent() { browsePath(currentPath); }
+
+    function showQRCode() {
+      if (!localIP) {
+        showToast('❌ 无法获取本机IP');
+        return;
+      }
+      const mobileUrl = `http://${localIP}:80/static/mobile.html`;
+      document.getElementById('mobileUrl').textContent = mobileUrl;
+      
+      const container = document.getElementById('qrcodeContainer');
+      container.innerHTML = '';
+      
+      try {
+        new QRCode(container, {
+          text: mobileUrl,
+          width: 180,
+          height: 180,
+          colorDark: "#4cc9a0",
+          colorLight: "#1f1f35",
+          correctLevel: QRCode.CorrectLevel.H
+        });
+      } catch (e) {
+        container.innerHTML = '<p style="color:red;">二维码生成失败</p>';
+      }
+      
+      document.getElementById('qrModal').classList.add('active');
+    }
+
+    function closeQRModal() {
+      document.getElementById('qrModal').classList.remove('active');
+    }
+
+    function showToast(msg) {
+      const old = document.querySelector('.toast');
+      if(old) old.remove();
+      const t = document.createElement('div'); t.className='toast'; t.textContent=msg;
+      document.body.appendChild(t); setTimeout(()=>t.remove(), 2500);
+    }
+
+    function esc(s) { return (s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"'); }
+    function escHtml(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'F5') { e.preventDefault(); refreshCurrent(); }
+      if (e.key === 'Backspace' && currentPath !== '/' && document.activeElement?.tagName !== 'INPUT') {
+        e.preventDefault();
+        const parent = currentPath.substring(0, currentPath.lastIndexOf('/')) || '/';
+        browsePath(parent);
+      }
+    });
+
+    window.browsePath = browsePath;
+    window.downloadFile = downloadFile;
+    window.selectPeer = selectPeer;
+    window.setShareDir = setShareDir;
+    window.switchTab = switchTab;
+    window.refreshCurrent = refreshCurrent;
+    window.debounceSearch = debounceSearch;
+    window.showQRCode = showQRCode;
+    window.closeQRModal = closeQRModal;
+    window.setVerificationCode = setVerificationCode;
+
+    init();
+  })();
+</script>
+</body>
+</html>
