@@ -661,16 +661,53 @@
     }
 
     async function downloadFile(path, name) {
-      showToast(`⬇️ 下载 ${name}`);
-      try {
-        const url = currentPeer === 'local' 
-          ? `/api/local/download?path=${encodeURIComponent(path)}`
-          : `/api/download/${currentPeer}?path=${encodeURIComponent(path)}`;
-        const a = document.createElement('a');
-        a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
-        showToast('✅ 下载完成');
-      } catch(e) { showToast('❌ 下载失败'); }
-    }
+		showToast(`⬇️ 开始下载 ${name}...`);
+		
+		try {
+			const url = currentPeer === 'local' 
+				? `/api/local/download?path=${encodeURIComponent(path)}`
+				: `/api/download/${currentPeer}?path=${encodeURIComponent(path)}`;
+			
+			// 方式1：使用 fetch 处理下载（更好的错误处理）
+			const response = await fetch(url);
+			
+			if (!response.ok) {
+				// 尝试解析错误信息
+				const contentType = response.headers.get('content-type');
+				if (contentType && contentType.includes('application/json')) {
+					const errorData = await response.json();
+					throw new Error(errorData.error || `下载失败 (${response.status})`);
+				}
+				throw new Error(`下载失败: HTTP ${response.status}`);
+			}
+			
+			// 获取文件名（优先从 Content-Disposition 获取）
+			let fileName = name;
+			const contentDisposition = response.headers.get('content-disposition');
+			if (contentDisposition) {
+				const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+				if (match && match[1]) {
+					fileName = match[1].replace(/['"]/g, '');
+				}
+			}
+			
+			// 创建 Blob 并触发下载
+			const blob = await response.blob();
+			const blobUrl = window.URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = blobUrl;
+			a.download = fileName;
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			window.URL.revokeObjectURL(blobUrl);
+			
+			showToast(`✅ 下载完成: ${fileName}`);
+		} catch(e) {
+			console.error('下载错误:', e);
+			showToast(`❌ 下载失败: ${e.message}`);
+		}
+	}
 
     function debounceSearch() {
       clearTimeout(searchTimer);
